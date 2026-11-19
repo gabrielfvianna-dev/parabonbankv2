@@ -73,6 +73,77 @@ const formasDaChave = (chave) => {
 };
 
 // ------------------------------------------------------------
+// POST /api/pix/consultar-chave
+// Consulta o destinatário sem realizar a transferência.
+// Body: { "key": "chave Pix", "accountId"?: 1 }
+// ------------------------------------------------------------
+router.post("/consultar-chave", async (req, res) => {
+  const chaveDigitada = texto(req.body.key).trim();
+
+  if (!chaveDigitada || chaveDigitada.length > 255) {
+    throw new ErroApi(400, "Informe uma chave Pix válida.", {
+      key: "Informe uma chave Pix válida.",
+    });
+  }
+
+  // Localiza a chave nas formas possíveis de CPF, telefone,
+  // e-mail ou chave aleatória.
+  const formas = formasDaChave(chaveDigitada);
+
+  const [encontradas] = await pool.execute(
+    `SELECT cp.chave, cp.conta_id, cl.nome_completo,
+            c.numero_conta, c.digito, c.status AS conta_status,
+            a.codigo_agencia, b.codigo_banco
+       FROM chave_pix cp
+       JOIN cliente cl ON cl.id = cp.cliente_id
+       JOIN conta c ON c.id = cp.conta_id
+       JOIN agencia a ON a.id = c.agencia_id
+       JOIN banco b ON b.id = a.banco_id
+      WHERE cp.status = 'ATIVA'
+        AND cp.chave IN (${formas.map(() => "?").join(", ")})`,
+    formas,
+  );
+
+  const destino = formas
+    .map((forma) =>
+      encontradas.find((linha) => linha.chave === forma)
+    )
+    .find(Boolean);
+
+  if (!destino) {
+    throw new ErroApi(404, "Chave Pix não encontrada.", {
+      key: "Confira a chave informada.",
+    });
+  }
+
+  if (destino.conta_status !== "ATIVA") {
+    throw new ErroApi(422, "Esta conta não pode receber Pix.");
+  }
+
+  // Confirma que a conta de origem pertence ao cliente logado.
+  const origem = await resolverContaOrigem(
+    req.body.accountId,
+    req.auth.clienteId
+  );
+
+  if (Number(origem.id) === Number(destino.conta_id)) {
+    throw new ErroApi(400, "Não é possível enviar Pix para a mesma conta.", {
+      key: "Esta chave pertence à sua própria conta.",
+    });
+  }
+
+  res.json({
+    recipient: {
+      name: destino.nome_completo,
+      bankCode: destino.codigo_banco,
+      agency: destino.codigo_agencia,
+      accountNumber: destino.numero_conta,
+      accountDigit: destino.digito,
+    },
+  });
+});
+
+// ------------------------------------------------------------
 // GET /api/pix/chaves — chaves Pix ativas do cliente logado.
 // ------------------------------------------------------------
 router.get("/chaves", async (req, res) => {

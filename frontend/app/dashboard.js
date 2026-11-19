@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import theme from "../constants/theme";
 import { apiRequest } from "../services/api";
 
 export default function Dashboard() {
+  const router = useRouter();
   const [showBalance, setShowBalance] = useState(true);
 
   const [cliente, setCliente] = useState(null);
@@ -29,42 +31,45 @@ export default function Dashboard() {
     });
   };
 
-  // Busca os dados do cliente, conta e extrato.
-  const loadDashboard = async () => {
-    try {
-      setLoading(true);
-      setError("");
+    // Busca os dados atualizados do cliente, conta e extrato.
+const loadDashboard = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError("");
 
-      const dadosCliente = await apiRequest("/api/clientes/me");
+    const dadosCliente = await apiRequest("/api/clientes/me");
 
-      setCliente(dadosCliente.cliente);
+    setCliente(dadosCliente.cliente);
 
-      const contaPrincipal = dadosCliente.contas?.[0];
+    const contaPrincipal = dadosCliente.contas?.[0];
 
-      if (!contaPrincipal) {
-        setConta(null);
-        setTransactions([]);
-        return;
-      }
-
-      setConta(contaPrincipal);
-
-      const dadosExtrato = await apiRequest(
-        `/api/contas/${contaPrincipal.id}/extrato?limit=50`
-      );
-
-      setTransactions(dadosExtrato.transacoes || []);
-    } catch (err) {
-      setError(err.message || "Não foi possível carregar os dados.");
-    } finally {
-      setLoading(false);
+    if (!contaPrincipal) {
+      setConta(null);
+      setTransactions([]);
+      return;
     }
-  };
 
-  // Executa a busca quando a tela é aberta.
-  useEffect(() => {
+    setConta(contaPrincipal);
+
+    const dadosExtrato = await apiRequest(
+      `/api/contas/${contaPrincipal.id}/extrato?limit=50`
+    );
+
+    setTransactions(dadosExtrato.transacoes || []);
+  } catch (err) {
+    setError(err.message || "Não foi possível carregar os dados.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+// Atualiza os dados sempre que o Dashboard recebe foco.
+useFocusEffect(
+  useCallback(() => {
     loadDashboard();
-  }, []);
+  }, [loadDashboard])
+);
+
 
   const balance = formatCurrency(conta?.balance);
 
@@ -139,7 +144,11 @@ export default function Dashboard() {
             key={item.id}
             accessibilityRole="button"
             accessibilityLabel={item.title}
-            onPress={() => {}}
+            onPress={() => {
+  if (item.title === "Pix") {
+    router.push("/pix");
+  }
+}}
             style={({ pressed }) => [
               styles.shortcut,
               pressed && styles.pressed,
@@ -184,31 +193,54 @@ export default function Dashboard() {
             </Text>
           </View>
         ) : (
-          transactions.map((transaction, index) => (
-            <View key={transaction.id}>
-              {index > 0 && <View style={styles.separator} />}
+          transactions.map((transaction, index) => {
+  const isDeposit = transaction.type === "DEPOSITO";
 
-              <View style={styles.transaction}>
-                <View style={styles.transactionIcon}>
-                  <Text style={styles.transactionSymbol}>•</Text>
-                </View>
+  return (
+    <View key={transaction.id}>
+      {index > 0 && <View style={styles.separator} />}
 
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionTitle}>
-                    {transaction.type}
-                  </Text>
+      <View style={styles.transaction}>
+        <View
+          style={[
+            styles.transactionIcon,
+            isDeposit && styles.incomeIcon,
+          ]}
+        >
+          <Text style={styles.transactionSymbol}>
+            {isDeposit ? "+" : "•"}
+          </Text>
+        </View>
 
-                  <Text style={styles.transactionDescription}>
-                    {transaction.description || "Movimentação bancária"}
-                  </Text>
-                </View>
+        <View style={styles.transactionInfo}>
+          <Text style={styles.transactionTitle}>
+            {isDeposit
+              ? "Depósito recebido"
+              : transaction.type?.replace(/_/g, " ") || "Movimentação"}
+          </Text>
 
-                <Text style={styles.transactionAmount}>
-                  {formatCurrency(transaction.amount)}
-                </Text>
-              </View>
-            </View>
-          ))
+          <Text style={styles.transactionDescription}>
+            {transaction.description || "Movimentação bancária"}
+          </Text>
+
+          <Text style={styles.transactionDescription}>
+            {formatDateTime(transaction.dateTime)}
+          </Text>
+        </View>
+
+        <Text
+          style={[
+            styles.transactionAmount,
+            isDeposit && styles.incomeText,
+          ]}
+        >
+          {isDeposit ? "+ " : ""}
+          {formatCurrency(transaction.amount)}
+        </Text>
+      </View>
+    </View>
+  );
+})
         )}
       </View>
 
@@ -218,6 +250,23 @@ export default function Dashboard() {
     </ScrollView>
   );
 }
+
+// Formata a data e o horário da movimentação.
+const formatDateTime = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 const styles = StyleSheet.create({
   screen: {

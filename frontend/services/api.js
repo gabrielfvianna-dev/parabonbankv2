@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 
 // IP do computador na rede Wi-Fi.
 // Não use localhost: o aplicativo roda no celular.
-const API_URL = "http://172.20.10.6:3000";
+const API_URL = "http://10.254.242.53:3000";
 
 export async function apiRequest(endpoint, options = {}) {
   const token = await SecureStore.getItemAsync("parabon_token");
