@@ -39,8 +39,9 @@ const gerarUuid = () => crypto.randomUUID();
 
 // Identificador do Pix no padrão E + ISPB(8) + AAAAMMDDHHmm + 11 caracteres.
 const gerarEndToEndId = () => {
-  const ispb = String(config.bancoCodigo).padStart(8, "0").slice(-8);
   const agora = new Date();
+
+  const ispb = String(config.bancoCodigo).padStart(8, "0").slice(-8);
   const data = [
     agora.getUTCFullYear(),
     String(agora.getUTCMonth() + 1).padStart(2, "0"),

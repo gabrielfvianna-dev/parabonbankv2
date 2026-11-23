@@ -48,15 +48,21 @@ const limitePix = rateLimit({
   message: { message: "Muitas operações seguidas. Aguarde um minuto." },
 });
 
+
 // Verifica se a API e o banco estão funcionando.
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
     res.json({ status: "ok", database: "ok" });
-  } catch {
-    res.status(503).json({ status: "erro", database: "indisponível" });
+  } catch (erro) {
+    console.error("Erro na verificação do banco:", erro);
+    res.status(503).json({
+      status: "erro",
+      database: "indisponível",
+    });
   }
 });
+
 
 app.use("/api/auth/login", limiteAuth);
 app.use("/api/auth/cadastro", limiteAuth);
