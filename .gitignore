@@ -22,3 +22,5 @@ pnpm-debug.log*
 # Sistema operacional
 .DS_Store
 Thumbs.db
+# Backups locais do banco de dados
+backup_sistema_bancario_*.sql
